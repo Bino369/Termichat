@@ -23,35 +23,22 @@
       background: #f9f9f9;
       color: #333;
     }
-    h2 {
+    header {
       text-align: center;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
+    }
+    h2 {
       font-size: 1.3rem;
     }
-    .room-bar {
-      display: flex;
-      gap: 6px;
-      margin-bottom: 8px;
-      align-items: center;
-      justify-content: space-between;
-      background: #eee;
-      padding: 8px 12px;
-      border-radius: 10px;
-      font-size: 14px;
-    }
-    .room-bar input {
-      padding: 6px 10px;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      font-size: 14px;
-      width: 110px;
-      text-align: center;
-    }
-    .room-bar button {
-      padding: 6px 12px;
-      font-size: 14px;
-      border-radius: 8px;
-      background: #34c759;
+    .status-badge {
+      display: inline-block;
+      font-size: 0.78rem;
+      color: #34c759;
+      background: rgba(52, 199, 89, 0.12);
+      padding: 3px 12px;
+      border-radius: 12px;
+      margin-top: 4px;
+      font-weight: 500;
     }
     #chat {
       flex: 1;
@@ -116,16 +103,11 @@
   </style>
 </head>
 <body>
-  <h2>TermiChat</h2>
+  <header>
+    <h2>TermiChat</h2>
+    <div id="status" class="status-badge">Connecting...</div>
+  </header>
   
-  <div class="room-bar">
-    <span id="my-id-display">ID: ...</span>
-    <div>
-      <input type="text" id="join-id-input" placeholder="Enter ID">
-      <button type="button" id="join-btn">Connect</button>
-    </div>
-  </div>
-
   <div id="chat"></div>
 
   <form id="form">
@@ -137,61 +119,93 @@
     const chat = document.getElementById('chat');
     const form = document.getElementById('form');
     const input = document.getElementById('input');
-    const myIdDisplay = document.getElementById('my-id-display');
-    const joinIdInput = document.getElementById('join-id-input');
-    const joinBtn = document.getElementById('join-btn');
+    const statusDiv = document.getElementById('status');
 
-    let peer = null;
-    let conn = null;
     let ws = null;
+    let peer = null;
+    let connections = [];
+    let isHub = false;
+    let hubConn = null;
 
-    // 1. Try local server WebSocket first
+    const GLOBAL_HUB_ID = 'termichat-global-room-hub-v1';
+
+    // 1. Try local server WebSocket first if running
     try {
       ws = new WebSocket('ws://' + window.location.host + '/ws');
-      ws.onopen = () => addMessage('[Connected to Local Server]', true);
+      ws.onopen = () => {
+        setStatus('Connected (Local Server)');
+        addMessage('[Connected to local server]', true);
+      };
       ws.onmessage = (e) => addMessage(e.data, false);
-      ws.onclose = () => initP2P();
-      ws.onerror = () => initP2P();
+      ws.onclose = () => startAutoCloudChat();
+      ws.onerror = () => startAutoCloudChat();
     } catch (e) {
-      initP2P();
+      startAutoCloudChat();
     }
 
-    // 2. Fallback to PeerJS P2P for Vercel Cloud hosting
-    function initP2P() {
+    // 2. Automatic zero-code live room auto-connect for Vercel
+    function startAutoCloudChat() {
       if (peer) return;
-      const shortId = Math.floor(1000 + Math.random() * 9000).toString();
-      peer = new Peer(shortId);
+      setStatus('Connecting to Live Room...');
 
-      peer.on('open', (id) => {
-        myIdDisplay.textContent = 'Your ID: ' + id;
-        addMessage('[Ready on Vercel! Share your ID: ' + id + ']', true);
+      peer = new Peer(GLOBAL_HUB_ID);
+
+      peer.on('open', () => {
+        isHub = true;
+        setStatus('Live Broadcast');
+        addMessage('[Connected to Live Room! Open this link on any phone to chat instantly]', true);
+      });
+
+      peer.on('error', (err) => {
+        if (err.type === 'unavailable-id') {
+          connectAsClient();
+        } else {
+          console.warn(err);
+        }
       });
 
       peer.on('connection', (c) => {
-        conn = c;
-        setupConnection();
-        addMessage('[Peer connected!]', true);
+        connections.push(c);
+        c.on('data', (data) => {
+          addMessage(data, false);
+          // Relay to all other connected phones
+          connections.forEach(other => {
+            if (other !== c && other.open) {
+              other.send(data);
+            }
+          });
+        });
+        c.on('close', () => {
+          connections = connections.filter(conn => conn !== c);
+        });
       });
     }
 
-    joinBtn.onclick = () => {
-      const targetId = joinIdInput.value.trim();
-      if (!targetId || !peer) return;
-      addMessage('[Connecting to ID: ' + targetId + '...]', true);
-      conn = peer.connect(targetId);
-      setupConnection();
-    };
+    function connectAsClient() {
+      const myId = 'user-' + Math.floor(1000 + Math.random() * 9000);
+      peer = new Peer(myId);
 
-    function setupConnection() {
-      conn.on('open', () => {
-        addMessage('[Connected! Start chatting]', true);
+      peer.on('open', () => {
+        hubConn = peer.connect(GLOBAL_HUB_ID);
+
+        hubConn.on('open', () => {
+          setStatus('Live Broadcast');
+          addMessage('[Connected to Live Chat!]', true);
+        });
+
+        hubConn.on('data', (data) => {
+          addMessage(data, false);
+        });
+
+        hubConn.on('close', () => {
+          setStatus('Reconnecting...');
+          setTimeout(() => location.reload(), 2000);
+        });
       });
-      conn.on('data', (data) => {
-        addMessage(data, false);
-      });
-      conn.on('close', () => {
-        addMessage('[Peer disconnected]', true);
-      });
+    }
+
+    function setStatus(text) {
+      statusDiv.textContent = text;
     }
 
     form.onsubmit = (e) => {
@@ -202,12 +216,18 @@
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(msg);
         input.value = '';
-      } else if (conn && conn.open) {
-        conn.send(msg);
+      } else if (isHub) {
+        addMessage(msg, false, true);
+        connections.forEach(c => {
+          if (c.open) c.send(msg);
+        });
+        input.value = '';
+      } else if (hubConn && hubConn.open) {
+        hubConn.send(msg);
         addMessage(msg, false, true);
         input.value = '';
       } else {
-        addMessage('[Not connected to any peer or server]', true);
+        addMessage('[Connecting to live room... please wait]', true);
       }
     };
 
