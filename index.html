@@ -127,40 +127,73 @@
     let isHub = false;
     let hubConn = null;
 
-    const GLOBAL_HUB_ID = 'termichat-global-room-hub-v1';
+    const GLOBAL_HUB_ID = 'termichat-global-5g-hub-v2';
 
-    // 1. Try local server WebSocket first if running
-    try {
-      ws = new WebSocket('ws://' + window.location.host + '/ws');
-      ws.onopen = () => {
-        setStatus('Connected (Local Server)');
-        addMessage('[Connected to local server]', true);
-      };
-      ws.onmessage = (e) => addMessage(e.data, false);
-      ws.onclose = () => startAutoCloudChat();
-      ws.onerror = () => startAutoCloudChat();
-    } catch (e) {
-      startAutoCloudChat();
+    // STUN + TURN servers configuration to traverse 5G Carrier-Grade NAT (CGNAT)
+    const peerConfig = {
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stun3.l.google.com:19302' },
+          { urls: 'stun:stun4.l.google.com:19302' },
+          { 
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelay',
+            credential: 'openrelay'
+          },
+          { 
+            urls: 'turn:openrelay.metered.ca:443',
+            username: 'openrelay',
+            credential: 'openrelay'
+          },
+          { 
+            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+            username: 'openrelay',
+            credential: 'openrelay'
+          }
+        ]
+      }
+    };
+
+    // 1. Try local server WebSocket first if running locally
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      try {
+        ws = new WebSocket('ws://' + window.location.host + '/ws');
+        ws.onopen = () => {
+          setStatus('Connected (Local Server)');
+          addMessage('[Connected to local server]', true);
+        };
+        ws.onmessage = (e) => addMessage(e.data, false);
+        ws.onclose = () => startAuto5GChat();
+        ws.onerror = () => startAuto5GChat();
+      } catch (e) {
+        startAuto5GChat();
+      }
+    } else {
+      startAuto5GChat();
     }
 
-    // 2. Automatic zero-code live room auto-connect for Vercel
-    function startAutoCloudChat() {
+    // 2. 5G Carrier-Grade NAT & TURN Auto Chat Connection
+    function startAuto5GChat() {
       if (peer) return;
-      setStatus('Connecting to Live Room...');
+      setStatus('Connecting to 5G Network...');
 
-      peer = new Peer(GLOBAL_HUB_ID);
+      peer = new Peer(GLOBAL_HUB_ID, peerConfig);
 
       peer.on('open', () => {
         isHub = true;
-        setStatus('Live Broadcast');
-        addMessage('[Connected to Live Room! Open this link on any phone to chat instantly]', true);
+        setStatus('Live (5G Ready)');
+        addMessage('[Connected on 5G/Wi-Fi! All phones opening the site join live]', true);
       });
 
       peer.on('error', (err) => {
         if (err.type === 'unavailable-id') {
           connectAsClient();
         } else {
-          console.warn(err);
+          console.warn('Peer error:', err);
+          connectAsClient();
         }
       });
 
@@ -168,7 +201,6 @@
         connections.push(c);
         c.on('data', (data) => {
           addMessage(data, false);
-          // Relay to all other connected phones
           connections.forEach(other => {
             if (other !== c && other.open) {
               other.send(data);
@@ -182,15 +214,15 @@
     }
 
     function connectAsClient() {
-      const myId = 'user-' + Math.floor(1000 + Math.random() * 9000);
-      peer = new Peer(myId);
+      const myId = 'user-' + Math.floor(100000 + Math.random() * 900000);
+      peer = new Peer(myId, peerConfig);
 
       peer.on('open', () => {
-        hubConn = peer.connect(GLOBAL_HUB_ID);
+        hubConn = peer.connect(GLOBAL_HUB_ID, { reliable: true });
 
         hubConn.on('open', () => {
-          setStatus('Live Broadcast');
-          addMessage('[Connected to Live Chat!]', true);
+          setStatus('Live (5G Connected)');
+          addMessage('[Connected to Live 5G Chat!]', true);
         });
 
         hubConn.on('data', (data) => {
@@ -200,6 +232,10 @@
         hubConn.on('close', () => {
           setStatus('Reconnecting...');
           setTimeout(() => location.reload(), 2000);
+        });
+
+        hubConn.on('error', (err) => {
+          console.warn('Hub connection error:', err);
         });
       });
     }
@@ -227,7 +263,7 @@
         addMessage(msg, false, true);
         input.value = '';
       } else {
-        addMessage('[Connecting to live room... please wait]', true);
+        addMessage('[Re-connecting to 5G room... please wait]', true);
       }
     };
 
