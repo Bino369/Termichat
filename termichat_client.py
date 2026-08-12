@@ -14,23 +14,31 @@ import threading
 
 PORT = 5555  # must match the port in termichat_server.py
 
+connected = True
+
 
 def receive_messages(sock):
     """Runs in the background, prints messages as they arrive."""
-    while True:
+    global connected
+    while connected:
         try:
             data = sock.recv(1024)
             if not data:
-                print("\n[Other side disconnected]\nPress Enter to exit.")
+                if connected:
+                    print("\n[Other side disconnected] (Press Enter to exit)", flush=True)
+                    connected = False
                 break
             text = data.decode("utf-8", errors="replace")
             print(f"\nThem: {text}\nYou: ", end="", flush=True)
         except (OSError, ConnectionResetError):
-            print("\n[Connection closed by other side]\nPress Enter to exit.")
+            if connected:
+                print("\n[Connection closed] (Press Enter to exit)", flush=True)
+                connected = False
             break
 
 
 def main():
+    global connected
     try:
         server_ip = input("Enter server IP address (e.g. 192.168.1.5): ").strip()
         if not server_ip:
@@ -52,9 +60,9 @@ def main():
     thread.start()
 
     try:
-        while True:
+        while connected:
             msg = input("You: ")
-            if msg.lower() == "quit":
+            if not connected or msg.lower() == "quit":
                 break
             if not msg:
                 continue
@@ -66,6 +74,7 @@ def main():
     except (KeyboardInterrupt, EOFError):
         print("\nExiting chat...")
     finally:
+        connected = False
         try:
             client.shutdown(socket.SHUT_RDWR)
         except OSError:

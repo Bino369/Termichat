@@ -15,23 +15,60 @@ import threading
 HOST = "0.0.0.0"   # listen on all network interfaces
 PORT = 5555         # pick any free port number
 
+connected = True
+
+
+def get_local_ips():
+    """Returns a list of local IP addresses for this machine."""
+    ips = []
+    # Attempt UDP socket connect trick to find primary outgoing LAN IP
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        primary_ip = s.getsockname()[0]
+        s.close()
+        if primary_ip and not primary_ip.startswith("127."):
+            ips.append(primary_ip)
+    except Exception:
+        pass
+
+    # Fallback / additional interface IPs
+    try:
+        hostname = socket.gethostname()
+        for ip in socket.gethostbyname_ex(hostname)[2]:
+            if not ip.startswith("127.") and ip not in ips:
+                ips.append(ip)
+    except Exception:
+        pass
+
+    if not ips:
+        ips.append("127.0.0.1")
+
+    return ips
+
 
 def receive_messages(conn):
     """Runs in the background, prints messages as they arrive."""
-    while True:
+    global connected
+    while connected:
         try:
             data = conn.recv(1024)
             if not data:
-                print("\n[Other side disconnected]\nPress Enter to exit.")
+                if connected:
+                    print("\n[Other side disconnected] (Press Enter to exit)", flush=True)
+                    connected = False
                 break
             text = data.decode("utf-8", errors="replace")
             print(f"\nThem: {text}\nYou: ", end="", flush=True)
         except (OSError, ConnectionResetError):
-            print("\n[Connection closed by other side]\nPress Enter to exit.")
+            if connected:
+                print("\n[Connection closed] (Press Enter to exit)", flush=True)
+                connected = False
             break
 
 
 def main():
+    global connected
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     # Enable address reuse so restarting server doesn't throw "Address already in use"
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -39,7 +76,17 @@ def main():
     try:
         server.bind((HOST, PORT))
         server.listen(1)
-        print(f"Waiting for a connection on port {PORT}...")
+        
+        local_ips = get_local_ips()
+        print("=" * 50)
+        print("  Termichat Server Started!")
+        print("  Give one of these IP addresses to the client:")
+        for ip in local_ips:
+            print(f"    -> {ip}")
+        print(f"    -> 127.0.0.1 (if client is on the same machine)")
+        print(f"  Port: {PORT}")
+        print("=" * 50)
+        print(f"\nWaiting for a connection on port {PORT}...")
         conn, addr = server.accept()
     except (KeyboardInterrupt, EOFError):
         print("\nServer stopped.")
@@ -58,9 +105,9 @@ def main():
 
     # Main thread handles typing and sending
     try:
-        while True:
+        while connected:
             msg = input("You: ")
-            if msg.lower() == "quit":
+            if not connected or msg.lower() == "quit":
                 break
             if not msg:
                 continue
@@ -72,6 +119,7 @@ def main():
     except (KeyboardInterrupt, EOFError):
         print("\nExiting chat...")
     finally:
+        connected = False
         try:
             conn.shutdown(socket.SHUT_RDWR)
         except OSError:
