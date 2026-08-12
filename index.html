@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>TermiChat</title>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -24,8 +25,33 @@
     }
     h2 {
       text-align: center;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       font-size: 1.3rem;
+    }
+    .room-bar {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 8px;
+      align-items: center;
+      justify-content: space-between;
+      background: #eee;
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-size: 14px;
+    }
+    .room-bar input {
+      padding: 6px 10px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-size: 14px;
+      width: 110px;
+      text-align: center;
+    }
+    .room-bar button {
+      padding: 6px 12px;
+      font-size: 14px;
+      border-radius: 8px;
+      background: #34c759;
     }
     #chat {
       flex: 1;
@@ -48,6 +74,11 @@
       max-width: 85%;
       align-self: flex-start;
     }
+    .msg.sent {
+      background: #007aff;
+      color: #fff;
+      align-self: flex-end;
+    }
     .system-msg {
       align-self: center;
       background: none;
@@ -69,7 +100,7 @@
     #input:focus {
       border-color: #007aff;
     }
-    button {
+    .send-btn {
       padding: 12px 20px;
       background: #007aff;
       color: #fff;
@@ -79,7 +110,7 @@
       font-weight: 600;
       cursor: pointer;
     }
-    button:active {
+    .send-btn:active {
       opacity: 0.8;
     }
   </style>
@@ -87,44 +118,108 @@
 <body>
   <h2>TermiChat</h2>
   
+  <div class="room-bar">
+    <span id="my-id-display">ID: ...</span>
+    <div>
+      <input type="text" id="join-id-input" placeholder="Enter ID">
+      <button type="button" id="join-btn">Connect</button>
+    </div>
+  </div>
+
   <div id="chat"></div>
 
   <form id="form">
     <input type="text" id="input" placeholder="Type a message..." autocomplete="off" required>
-    <button type="submit">Send</button>
+    <button type="submit" class="send-btn">Send</button>
   </form>
 
   <script>
     const chat = document.getElementById('chat');
     const form = document.getElementById('form');
     const input = document.getElementById('input');
+    const myIdDisplay = document.getElementById('my-id-display');
+    const joinIdInput = document.getElementById('join-id-input');
+    const joinBtn = document.getElementById('join-btn');
 
-    const ws = new WebSocket('ws://' + window.location.host + '/ws');
+    let peer = null;
+    let conn = null;
+    let ws = null;
 
-    ws.onopen = () => {
-      addMessage('[Connected to server]', true);
+    // 1. Try local server WebSocket first
+    try {
+      ws = new WebSocket('ws://' + window.location.host + '/ws');
+      ws.onopen = () => addMessage('[Connected to Local Server]', true);
+      ws.onmessage = (e) => addMessage(e.data, false);
+      ws.onclose = () => initP2P();
+      ws.onerror = () => initP2P();
+    } catch (e) {
+      initP2P();
+    }
+
+    // 2. Fallback to PeerJS P2P for Vercel Cloud hosting
+    function initP2P() {
+      if (peer) return;
+      const shortId = Math.floor(1000 + Math.random() * 9000).toString();
+      peer = new Peer(shortId);
+
+      peer.on('open', (id) => {
+        myIdDisplay.textContent = 'Your ID: ' + id;
+        addMessage('[Ready on Vercel! Share your ID: ' + id + ']', true);
+      });
+
+      peer.on('connection', (c) => {
+        conn = c;
+        setupConnection();
+        addMessage('[Peer connected!]', true);
+      });
+    }
+
+    joinBtn.onclick = () => {
+      const targetId = joinIdInput.value.trim();
+      if (!targetId || !peer) return;
+      addMessage('[Connecting to ID: ' + targetId + '...]', true);
+      conn = peer.connect(targetId);
+      setupConnection();
     };
 
-    ws.onmessage = (event) => {
-      addMessage(event.data, false);
-    };
-
-    ws.onclose = () => {
-      addMessage('[Disconnected from server]', true);
-    };
+    function setupConnection() {
+      conn.on('open', () => {
+        addMessage('[Connected! Start chatting]', true);
+      });
+      conn.on('data', (data) => {
+        addMessage(data, false);
+      });
+      conn.on('close', () => {
+        addMessage('[Peer disconnected]', true);
+      });
+    }
 
     form.onsubmit = (e) => {
       e.preventDefault();
       const msg = input.value.trim();
-      if (msg) {
+      if (!msg) return;
+
+      if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(msg);
         input.value = '';
+      } else if (conn && conn.open) {
+        conn.send(msg);
+        addMessage(msg, false, true);
+        input.value = '';
+      } else {
+        addMessage('[Not connected to any peer or server]', true);
       }
     };
 
-    function addMessage(text, isSystem = false) {
+    function addMessage(text, isSystem = false, isSent = false) {
       const div = document.createElement('div');
-      div.className = isSystem ? 'system-msg' : 'msg';
+      if (isSystem) {
+        div.className = 'system-msg';
+      } else if (isSent) {
+        div.className = 'msg sent';
+      } else {
+        div.className = 'msg';
+      }
       div.textContent = text;
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
