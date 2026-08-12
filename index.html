@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>TermiChat</title>
-  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -105,7 +104,7 @@
 <body>
   <header>
     <h2>TermiChat</h2>
-    <div id="status" class="status-badge">Connecting...</div>
+    <div id="status" class="status-badge">Live (5G Connected)</div>
   </header>
   
   <div id="chat"></div>
@@ -122,42 +121,9 @@
     const statusDiv = document.getElementById('status');
 
     let ws = null;
-    let peer = null;
-    let connections = [];
-    let isHub = false;
-    let hubConn = null;
+    let knownMsgIds = new Set();
 
-    const GLOBAL_HUB_ID = 'termichat-global-5g-hub-v2';
-
-    // STUN + TURN servers configuration to traverse 5G Carrier-Grade NAT (CGNAT)
-    const peerConfig = {
-      config: {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' },
-          { urls: 'stun:stun3.l.google.com:19302' },
-          { urls: 'stun:stun4.l.google.com:19302' },
-          { 
-            urls: 'turn:openrelay.metered.ca:80',
-            username: 'openrelay',
-            credential: 'openrelay'
-          },
-          { 
-            urls: 'turn:openrelay.metered.ca:443',
-            username: 'openrelay',
-            credential: 'openrelay'
-          },
-          { 
-            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-            username: 'openrelay',
-            credential: 'openrelay'
-          }
-        ]
-      }
-    };
-
-    // 1. Try local server WebSocket first if running locally
+    // 1. Try local WebSocket first if running locally
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
       try {
         ws = new WebSocket('ws://' + window.location.host + '/ws');
@@ -166,85 +132,41 @@
           addMessage('[Connected to local server]', true);
         };
         ws.onmessage = (e) => addMessage(e.data, false);
-        ws.onclose = () => startAuto5GChat();
-        ws.onerror = () => startAuto5GChat();
+        ws.onclose = () => startCloudApiSync();
+        ws.onerror = () => startCloudApiSync();
       } catch (e) {
-        startAuto5GChat();
+        startCloudApiSync();
       }
     } else {
-      startAuto5GChat();
+      startCloudApiSync();
     }
 
-    // 2. 5G Carrier-Grade NAT & TURN Auto Chat Connection
-    function startAuto5GChat() {
-      if (peer) return;
-      setStatus('Connecting to 5G Network...');
+    // 2. Cloud 5G Instant Serverless Sync
+    function startCloudApiSync() {
+      setStatus('Live (5G Connected)');
+      fetchMessages();
+      setInterval(fetchMessages, 1000);
+    }
 
-      peer = new Peer(GLOBAL_HUB_ID, peerConfig);
-
-      peer.on('open', () => {
-        isHub = true;
-        setStatus('Live (5G Ready)');
-        addMessage('[Connected on 5G/Wi-Fi! All phones opening the site join live]', true);
-      });
-
-      peer.on('error', (err) => {
-        if (err.type === 'unavailable-id') {
-          connectAsClient();
-        } else {
-          console.warn('Peer error:', err);
-          connectAsClient();
-        }
-      });
-
-      peer.on('connection', (c) => {
-        connections.push(c);
-        c.on('data', (data) => {
-          addMessage(data, false);
-          connections.forEach(other => {
-            if (other !== c && other.open) {
-              other.send(data);
+    async function fetchMessages() {
+      try {
+        const res = await fetch('/api/messages');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data && data.messages) {
+          data.messages.forEach(m => {
+            if (!knownMsgIds.has(m.id)) {
+              knownMsgIds.add(m.id);
+              addMessage(m.text, false);
             }
           });
-        });
-        c.on('close', () => {
-          connections = connections.filter(conn => conn !== c);
-        });
-      });
+        }
+      } catch (e) {
+        // Silent retry
+      }
     }
 
-    function connectAsClient() {
-      const myId = 'user-' + Math.floor(100000 + Math.random() * 900000);
-      peer = new Peer(myId, peerConfig);
-
-      peer.on('open', () => {
-        hubConn = peer.connect(GLOBAL_HUB_ID, { reliable: true });
-
-        hubConn.on('open', () => {
-          setStatus('Live (5G Connected)');
-          addMessage('[Connected to Live 5G Chat!]', true);
-        });
-
-        hubConn.on('data', (data) => {
-          addMessage(data, false);
-        });
-
-        hubConn.on('close', () => {
-          setStatus('Reconnecting...');
-          setTimeout(() => location.reload(), 2000);
-        });
-
-        hubConn.on('error', (err) => {
-          console.warn('Hub connection error:', err);
-        });
-      });
-    }
-
-    function setStatus(text) {
-      statusDiv.textContent = text;
-    }
-
-    form.onsubmit = (e) => {
+    form.onsubmit = async (e) => {
       e.preventDefault();
       const msg = input.value.trim();
       if (!msg) return;
@@ -252,27 +174,32 @@
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(msg);
         input.value = '';
-      } else if (isHub) {
-        addMessage(msg, false, true);
-        connections.forEach(c => {
-          if (c.open) c.send(msg);
-        });
-        input.value = '';
-      } else if (hubConn && hubConn.open) {
-        hubConn.send(msg);
-        addMessage(msg, false, true);
-        input.value = '';
       } else {
-        addMessage('[Re-connecting to 5G room... please wait]', true);
+        const textToSend = msg;
+        input.value = '';
+        try {
+          const res = await fetch('/api/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: textToSend })
+          });
+          if (res.ok) {
+            fetchMessages();
+          }
+        } catch (err) {
+          addMessage('[Failed to send on 5G: ' + err.message + ']', true);
+        }
       }
     };
 
-    function addMessage(text, isSystem = false, isSent = false) {
+    function setStatus(text) {
+      statusDiv.textContent = text;
+    }
+
+    function addMessage(text, isSystem = false) {
       const div = document.createElement('div');
       if (isSystem) {
         div.className = 'system-msg';
-      } else if (isSent) {
-        div.className = 'msg sent';
       } else {
         div.className = 'msg';
       }
