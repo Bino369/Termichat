@@ -16,9 +16,12 @@ export default function handler(req, res) {
       try { body = JSON.parse(body); } catch(e) {}
     }
     const text = body ? (body.text || body.message) : null;
+    const sender = (body && body.sender) ? body.sender.trim() : 'Anonymous';
+
     if (text) {
       const newMsg = {
         id: Date.now() + '-' + Math.random().toString(36).substr(2, 5),
+        sender: sender,
         text: text
       };
       messages.push(newMsg);

@@ -28,15 +28,38 @@
     }
     h2 {
       font-size: 1.3rem;
+      margin-bottom: 4px;
+    }
+    .user-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      background: #fff;
+      padding: 6px 12px;
+      border-radius: 12px;
+      border: 1px solid #e5e5ea;
+    }
+    .user-bar label {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: #666;
+    }
+    .user-bar input {
+      padding: 4px 8px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      width: 120px;
+      outline: none;
     }
     .status-badge {
       display: inline-block;
       font-size: 0.78rem;
       color: #34c759;
       background: rgba(52, 199, 89, 0.12);
-      padding: 3px 12px;
+      padding: 3px 10px;
       border-radius: 12px;
-      margin-top: 4px;
       font-weight: 500;
     }
     #chat {
@@ -53,17 +76,28 @@
     }
     .msg {
       background: #e9e9eb;
-      padding: 10px 14px;
+      padding: 8px 12px;
       border-radius: 16px;
       word-break: break-word;
       font-size: 0.95rem;
       max-width: 85%;
       align-self: flex-start;
+      display: flex;
+      flex-direction: column;
     }
     .msg.sent {
       background: #007aff;
       color: #fff;
       align-self: flex-end;
+    }
+    .sender-name {
+      font-size: 0.72rem;
+      font-weight: 600;
+      margin-bottom: 2px;
+      color: #555;
+    }
+    .msg.sent .sender-name {
+      color: rgba(255, 255, 255, 0.85);
     }
     .system-msg {
       align-self: center;
@@ -104,7 +138,13 @@
 <body>
   <header>
     <h2>TermiChat</h2>
-    <div id="status" class="status-badge">Live (5G Connected)</div>
+    <div class="user-bar">
+      <div id="status" class="status-badge">Live (5G Connected)</div>
+      <div>
+        <label for="username">Name: </label>
+        <input type="text" id="username" placeholder="Your Name" maxlength="15">
+      </div>
+    </div>
   </header>
   
   <div id="chat"></div>
@@ -119,6 +159,16 @@
     const form = document.getElementById('form');
     const input = document.getElementById('input');
     const statusDiv = document.getElementById('status');
+    const usernameInput = document.getElementById('username');
+
+    // Load or generate default username
+    let currentUsername = localStorage.getItem('termichat_username') || ('User' + Math.floor(100 + Math.random() * 900));
+    usernameInput.value = currentUsername;
+
+    usernameInput.addEventListener('input', () => {
+      currentUsername = usernameInput.value.trim() || 'Anonymous';
+      localStorage.setItem('termichat_username', currentUsername);
+    });
 
     let ws = null;
     let knownMsgIds = new Set();
@@ -129,9 +179,9 @@
         ws = new WebSocket('ws://' + window.location.host + '/ws');
         ws.onopen = () => {
           setStatus('Connected (Local Server)');
-          addMessage('[Connected to local server]', true);
+          addMessage({ sender: 'System', text: 'Connected to local server' }, true);
         };
-        ws.onmessage = (e) => addMessage(e.data, false);
+        ws.onmessage = (e) => addMessage({ sender: 'Them', text: e.data }, false);
         ws.onclose = () => startCloudApiSync();
         ws.onerror = () => startCloudApiSync();
       } catch (e) {
@@ -157,7 +207,7 @@
           data.messages.forEach(m => {
             if (!knownMsgIds.has(m.id)) {
               knownMsgIds.add(m.id);
-              addMessage(m.text, false);
+              addMessage(m, false);
             }
           });
         }
@@ -171,8 +221,10 @@
       const msg = input.value.trim();
       if (!msg) return;
 
+      const user = usernameInput.value.trim() || 'Anonymous';
+
       if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(msg);
+        ws.send(user + ': ' + msg);
         input.value = '';
       } else {
         const textToSend = msg;
@@ -181,13 +233,13 @@
           const res = await fetch('/api/messages', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: textToSend })
+            body: JSON.stringify({ sender: user, text: textToSend })
           });
           if (res.ok) {
             fetchMessages();
           }
         } catch (err) {
-          addMessage('[Failed to send on 5G: ' + err.message + ']', true);
+          addMessage({ sender: 'System', text: 'Failed to send: ' + err.message }, true);
         }
       }
     };
@@ -196,14 +248,27 @@
       statusDiv.textContent = text;
     }
 
-    function addMessage(text, isSystem = false) {
+    function addMessage(msgObj, isSystem = false) {
       const div = document.createElement('div');
       if (isSystem) {
         div.className = 'system-msg';
+        div.textContent = msgObj.text || msgObj;
       } else {
-        div.className = 'msg';
+        const sender = msgObj.sender || 'Anonymous';
+        const isSent = (sender === currentUsername);
+        div.className = isSent ? 'msg sent' : 'msg';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'sender-name';
+        nameSpan.textContent = sender;
+
+        const textSpan = document.createElement('span');
+        textSpan.textContent = msgObj.text || msgObj;
+
+        div.appendChild(nameSpan);
+        div.appendChild(textSpan);
       }
-      div.textContent = text;
+
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
     }
