@@ -2,143 +2,52 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TermiChat - Real-Time Terminal & Web Messenger</title>
-  <meta name="description" content="A sleek, lightweight real-time chat application for local networks and terminals.">
-  <!-- Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <title>TermiChat</title>
 </head>
-<body class="theme-cyber">
-  <div class="app-container">
-    <!-- Header -->
-    <header class="app-header">
-      <div class="brand">
-        <div class="logo-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="4 17 10 11 4 5"></polyline>
-            <line x1="12" y1="19" x2="20" y2="19"></line>
-          </svg>
-        </div>
-        <div class="brand-text">
-          <h1>TermiChat <span class="badge-v">web v1.0</span></h1>
-          <p id="server-address-display" class="server-ip-info">Fetching server address...</p>
-        </div>
-      </div>
+<body>
+  <h2>TermiChat</h2>
+  
+  <div id="chat" style="height: 300px; border: 1px solid #ccc; overflow-y: scroll; padding: 10px; margin-bottom: 10px;"></div>
 
-      <div class="header-actions">
-        <!-- Status Indicator -->
-        <div id="status-badge" class="status-badge status-disconnected">
-          <span class="status-dot"></span>
-          <span id="status-text">Disconnected</span>
-        </div>
+  <form id="form">
+    <input type="text" id="input" placeholder="Type a message..." style="width: 75%; padding: 8px;" required>
+    <button type="submit" style="padding: 8px 16px;">Send</button>
+  </form>
 
-        <!-- Controls -->
-        <button id="sound-btn" class="icon-btn" title="Toggle Sound" aria-label="Toggle Sound">
-          <svg id="sound-icon-on" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-          </svg>
-        </button>
+  <script>
+    const chat = document.getElementById('chat');
+    const form = document.getElementById('form');
+    const input = document.getElementById('input');
 
-        <button id="theme-btn" class="icon-btn" title="Cycle Theme" aria-label="Cycle Theme">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="5"></circle>
-            <line x1="12" y1="1" x2="12" y2="3"></line>
-            <line x1="12" y1="21" x2="12" y2="23"></line>
-            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-            <line x1="1" y1="12" x2="3" y2="12"></line>
-            <line x1="21" y1="12" x2="23" y2="12"></line>
-            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-          </svg>
-        </button>
+    const ws = new WebSocket('ws://' + window.location.host + '/ws');
 
-        <button id="settings-btn" class="icon-btn" title="Connection Settings" aria-label="Settings">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="3"></circle>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-          </svg>
-        </button>
-      </div>
-    </header>
+    ws.onopen = () => {
+      addMessage('[Connected to server]');
+    };
 
-    <!-- Main Chat Window -->
-    <main class="chat-main">
-      <!-- Message Stream -->
-      <div id="message-container" class="message-container">
-        <div class="system-message welcome-card">
-          <div class="welcome-icon">⚡</div>
-          <h3>Welcome to TermiChat Web</h3>
-          <p>Real-time messaging interface for your local terminal & network.</p>
-          <div id="quick-ip-box" class="ip-info-box">
-            <span>Server IP: <strong id="hero-ip-display">Loading...</strong></span>
-          </div>
-        </div>
-      </div>
+    ws.onmessage = (event) => {
+      addMessage(event.data);
+    };
 
-      <!-- Quick Action Emoji / Preset Bar -->
-      <div class="quick-bar">
-        <button class="quick-chip" data-msg="👋 Hi there!">👋 Hi</button>
-        <button class="quick-chip" data-msg="👍 Sounds good!">👍 Okay</button>
-        <button class="quick-chip" data-msg="🚀 Ready when you are!">🚀 Ready</button>
-        <button class="quick-chip" data-msg="❓ What is your IP?">❓ Ask IP</button>
-        <button class="quick-chip" data-msg="🎉 Awesome!">🎉 Great</button>
-      </div>
+    ws.onclose = () => {
+      addMessage('[Disconnected from server]');
+    };
 
-      <!-- Input Bar -->
-      <footer class="input-footer">
-        <form id="chat-form" class="input-form">
-          <div class="input-wrapper">
-            <input 
-              type="text" 
-              id="message-input" 
-              placeholder="Type a message or command..." 
-              autocomplete="off" 
-              required
-            >
-          </div>
-          <button type="submit" id="send-btn" class="send-btn" aria-label="Send Message">
-            <span>Send</span>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13"></line>
-              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-            </svg>
-          </button>
-        </form>
-      </footer>
-    </main>
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      const msg = input.value.trim();
+      if (msg) {
+        ws.send(msg);
+        input.value = '';
+      }
+    };
 
-    <!-- Connection Modal -->
-    <div id="connection-modal" class="modal-overlay hidden">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h2>Connection Settings</h2>
-          <button id="close-modal-btn" class="close-btn">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div class="form-group">
-            <label for="username-input">Your Display Name</label>
-            <input type="text" id="username-input" placeholder="e.g. User1, Alice" value="User">
-          </div>
-          <div class="form-group">
-            <label for="ws-url-input">WebSocket Server URL</label>
-            <input type="text" id="ws-url-input" placeholder="ws://localhost:8000/ws">
-          </div>
-          <div class="info-note">
-            <p>💡 Running `python3 web_server.py` hosts both the web UI and WebSocket server automatically.</p>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button id="connect-modal-btn" class="btn primary-btn">Reconnect Now</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <script src="app.js"></script>
+    function addMessage(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+  </script>
 </body>
 </html>
