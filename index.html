@@ -161,6 +161,9 @@
     const statusDiv = document.getElementById('status');
     const usernameInput = document.getElementById('username');
 
+    // Record session start timestamp so refresh clears past history
+    const sessionStartTime = Date.now();
+
     // Load or generate default username
     let currentUsername = localStorage.getItem('termichat_username') || ('User' + Math.floor(100 + Math.random() * 900));
     usernameInput.value = currentUsername;
@@ -205,7 +208,8 @@
         const data = await res.json();
         if (data && data.messages) {
           data.messages.forEach(m => {
-            if (!knownMsgIds.has(m.id)) {
+            // Only render messages sent AFTER this page session started
+            if (m.timestamp >= sessionStartTime && !knownMsgIds.has(m.id)) {
               knownMsgIds.add(m.id);
               addMessage(m, false);
             }

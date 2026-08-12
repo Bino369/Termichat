@@ -19,13 +19,15 @@ export default function handler(req, res) {
     const sender = (body && body.sender) ? body.sender.trim() : 'Anonymous';
 
     if (text) {
+      const now = Date.now();
       const newMsg = {
-        id: Date.now() + '-' + Math.random().toString(36).substr(2, 5),
+        id: now + '-' + Math.random().toString(36).substr(2, 5),
+        timestamp: now,
         sender: sender,
         text: text
       };
       messages.push(newMsg);
-      if (messages.length > 50) {
+      if (messages.length > 100) {
         messages.shift();
       }
       return res.status(200).json({ success: true, message: newMsg });
