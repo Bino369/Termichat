@@ -32,3 +32,24 @@ python3 termichat_server.py
 ```bash
 python3 termichat_client.py
 ```
+
+## System Architecture 🏗️
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                      TermiChat                          │
+├──────────────────────────┬──────────────────────────────┤
+│   Terminal Socket Mode   │       Web Interface Mode     │
+│  (termichat_server.py)   │       (index.html UI)        │
+│  (termichat_client.py)   │              │               │
+└────────────┬─────────────┴──────────────┼───────────────┘
+             │                            │
+             ▼                            ▼
+      Direct TCP Sockets         ┌─────────────────────────┐
+         (Port 5555)             │ WebSocket (Local 8000)  │
+                                 │        -- OR --         │
+                                 │ Vercel Serverless API   │
+                                 │   (/api/messages)       │
+                                 └─────────────────────────┘
+```
+
