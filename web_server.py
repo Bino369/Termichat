@@ -52,7 +52,12 @@ def get_local_ips():
     return ips
 
 
-def encode_ws_frame(message):
+def log_server_event(event_type: str, details: str) -> None:
+    """Helper to log timestamped web server events to stdout."""
+    print(f"[{event_type}] {details}", flush=True)
+
+
+def encode_ws_frame(message: str) -> bytes:
     """Encodes a string into an unmasked WebSocket text frame."""
     payload = message.encode("utf-8")
     length = len(payload)
