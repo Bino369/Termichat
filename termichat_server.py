@@ -18,9 +18,9 @@ PORT = 5555         # pick any free port number
 connected = True
 
 
-def get_local_ips():
-    """Returns a list of local IP addresses for this machine."""
-    ips = []
+def get_local_ips() -> list[str]:
+    """Returns a list of local IP addresses bound to network interfaces on this machine."""
+    ips: list[str] = []
     # Attempt UDP socket connect trick to find primary outgoing LAN IP
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
