@@ -17,8 +17,8 @@ PORT = 5555  # must match the port in termichat_server.py
 connected = True
 
 
-def receive_messages(sock):
-    """Runs in the background, prints messages as they arrive."""
+def receive_messages(sock: socket.socket) -> None:
+    """Runs in background thread, listening and displaying incoming messages from server."""
     global connected
     while connected:
         try:
