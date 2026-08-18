@@ -13,7 +13,7 @@ env/
 venv/
 ENV/
 
-# Node.js & Vercel
+
 node_modules/
 .vercel
 npm-debug.log*
